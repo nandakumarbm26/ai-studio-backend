@@ -12,7 +12,6 @@ def create_prompt_agent_handler(promptAgent: CreatePromptEngineeredAgent, db: Se
     try:
         return create_prompt_agent(db, promptAgent)
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -21,5 +20,4 @@ def read_all(filters: PromptAgentQueryRequest = Depends(),db: Session = Depends(
     try:
         return get_prompt_agent(db, filters)
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))

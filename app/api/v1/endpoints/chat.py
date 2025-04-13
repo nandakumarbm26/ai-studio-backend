@@ -10,7 +10,6 @@ from json.decoder import JSONDecodeError
 router = APIRouter()
 openai_client = OpenAI()
 
-print("chat router loaded")
 
 @router.post("/", response_model=ChatResponse)
 def chat_with_openai(request: ChatRequest, db: Session = Depends(get_db)):
@@ -73,8 +72,6 @@ def chat_with_openai(request: ChatRequest, db: Session = Depends(get_db)):
         return ChatResponse(response=response)
 
     except HTTPException as he:
-        print(he)
         raise he  # Let FastAPI handle it
     except Exception as e:
-        print(f"Unexpected error in chat_with_openai: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")

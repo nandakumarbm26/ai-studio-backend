@@ -5,7 +5,6 @@ import json
 from fastapi.encoders import jsonable_encoder
 
 def create_prompt_agent(db: Session, promptAgent: CreatePromptEngineeredAgent):
-    print(type(json.dumps([tp.dict() for tp in promptAgent.trainingPrompts])))
     promptAgent.trainingPrompts = json.dumps([tp.dict() for tp in promptAgent.trainingPrompts])
     db_item = PromptEngineeredAgent(**promptAgent.dict())
     db.add(db_item)
