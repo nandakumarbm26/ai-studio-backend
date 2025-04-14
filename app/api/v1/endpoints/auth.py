@@ -20,18 +20,6 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
             detail="Email already exists"
         )
 
-@router.post("/token", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token = security.create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
-
 @router.get("/me", response_model=UserOut)
 def read_users_me(current_user: UserOut = Depends(get_current_user)):
     return current_user
