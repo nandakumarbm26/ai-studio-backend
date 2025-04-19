@@ -7,7 +7,9 @@ from app.core.security import get_password_hash, verify_password
 def create_user(db: Session, user: UserCreate):
     # print(db.query(User).all())
     exist_user = db.query(User).filter(User.email == user.email).first()
+    
     if exist_user:
+        print(exist_user,"print(exist_user)")
         raise HTTPException(status_code=400, detail="Email already exists")
     
     new_user = User(

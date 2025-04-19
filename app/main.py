@@ -8,7 +8,7 @@ app = FastAPI(title="PromptAI Platform")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 🔥 Allow all origins (for dev only!)
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
