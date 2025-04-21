@@ -1,14 +1,96 @@
 import strawberry
-from typing import List, Optional
 from datetime import datetime
-from app.models.agent import PromptEngineeredAgent
-from app.schemas.graphql.auth import User
-from app.db.session import get_db
-from app.lib.gql import map_model
-from app.lib.gql import requires_auth
-from strawberry.types import Info
 
-# --- GraphQL Types ---
+import strawberry.types
+from app.models.agent import PromptEngineeredAgent
+from app.db.session import get_db
+from app.lib.graphql.gql import map_model
+from app.lib.graphql.gql import requires_auth
+from strawberry.types import Info
+from fastapi import HTTPException
+from app.crud.agent import get_prompt_agent
+from app.lib.openai_wrapper import OpenAI
+import json
+from json.decoder import JSONDecodeError
+from typing import List, Optional
+from enum import Enum
+from sqlalchemy import or_
+from app.lib.graphql.get_items import list_items
+SQL_RECORDS_LIMIT =  10
+
+
+@strawberry.enum
+class Role(Enum):
+    system = "system"
+    user = "user"
+    assistant = "assistant"
+
+@strawberry.enum
+class InputEnum(Enum):
+    text = "text"
+    image_url = "image_url"
+
+# Define message types for content (Text and Image)
+@strawberry.input
+class Input:
+    type: InputEnum  # Content type, e.g., "text"
+    text: Optional[str] = None  # The actual message content
+    imageUrl: Optional[str] = None  # The actual message content
+
+@strawberry.input
+class Content:
+    text:Optional[Input] = None
+    image:Optional[Input] = None
+
+# Define Message Type that uses the Role Enum and Content (Text or Image)
+@strawberry.input
+class Message:
+    role: Role  # Role of the sender: system, user, or assistant
+    content: Content  # Content of the message (Text or Image)
+
+    def to_dict(self):
+        parts = []
+
+        if self.content.text and self.content.text.text:
+            parts.append(self.content.text.text)
+
+        if self.content.image and self.content.image.imageUrl:
+            parts.append({
+                "type": "image_url",
+                "image_url": {"url": self.content.image.imageUrl}
+            })
+
+        content = parts[0] if len(parts) == 1 and isinstance(parts[0], str) else parts
+
+        return {
+            "role": self.role.value,
+            "content": content
+        }
+
+
+# Define the query filters (optional fields)
+@strawberry.input
+class PromptAgentQueryRequest:
+    id: Optional[int] = None  # Optional unique identifier
+    agentName: Optional[str] = None  # Agent name (optional)
+    system: Optional[str] = None  # System name or identifier (optional)
+    s: Optional[str] = None  # Search or query parameter
+
+
+# Define the input object for the chat request
+@strawberry.input
+class ChatRequest:
+    messages: List[Message]  # List of messages for the chat
+    filters: Optional[PromptAgentQueryRequest] = None  # Optional filters for the query
+
+
+# Define the response type for the chat completion (output type)
+@strawberry.type
+class ChatResponse:
+    response: str  # The chat completion response
+
+
+# --- GraphQL Types --- 
 @strawberry.input
 class TrainingPrompt:
     userPrompt: str
@@ -40,6 +122,41 @@ class ResponseCreatePromptEngineeredAgent:
     trainingPrompts: Optional[str]
     createdDate: Optional[datetime]
     updatedDate: Optional[datetime]
+
+@strawberry.input
+class ResponseCreatePromptEngineeredAgentRes:
+    id: int
+    agentName: Optional[str]
+    description: Optional[str]
+    system: Optional[str]
+    responseTemplate: Optional[str]
+    trainingPrompts: Optional[str]
+    createdDate: Optional[datetime]
+    updatedDate: Optional[datetime]
+
+@strawberry.type
+class ListAgentResponse:
+    agents : List[ResponseCreatePromptEngineeredAgent]
+    has_more : bool
+    page : int
+
+@strawberry.input
+class ListAgentres:
+    agents : List[ResponseCreatePromptEngineeredAgentRes]
+    has_more : bool
+    page : int
+
+@strawberry.input
+class ListAgentsRequest:
+    page: int
+    s: Optional[str] = None
+    order_by: Optional[str] = None
+
+@strawberry.input
+class ListAgentFilters:
+    search: Optional[str] = None
+    order_by: Optional[str] = "createdDate"  # default ordering
+    descending: Optional[bool] = True        # descending by default
 
 # --- Mutations ---
 @strawberry.type
@@ -94,7 +211,79 @@ class AgentMutation:
             return True
         return False
 
+
+    # Define the mutation to handle chat completions using OpenAI
+    @strawberry.mutation
+    # @requires_auth  # Assuming this decorator is already defined to handle authentication
+    def open_ai_completion(self, info:Info,  chatrequest: ChatRequest) -> ChatResponse:
+        try:
+            openai_client = OpenAI()  # Assuming OpenAI is your custom class for API interaction
+            db = next(get_db())  # Get the database session
+            agents = get_prompt_agent(db, chatrequest.filters)  # Retrieve agents based on the provided filters
+            print(agents)
+            if not agents:
+                raise HTTPException(status_code=404, detail="No agent found for given filters")
+
+            chat_context = agents[0].__dict__
+            context = []
+
+            # Ensure required keys exist
+            required_keys = ["agentName", "description", "system", "responseTemplate", "trainingPrompts"]
+            for key in required_keys:
+                if key not in chat_context:
+                    raise HTTPException(status_code=500, detail=f"Missing key in agent context: {key}")
+
+            # Load training prompts safely
+            try:
+                training_data = json.loads(chat_context["trainingPrompts"])
+            except (JSONDecodeError, TypeError):
+                raise HTTPException(status_code=500, detail="Invalid or malformed trainingPrompts")
+
+            # Validate training data structure
+            if not isinstance(training_data, list):
+                raise HTTPException(status_code=500, detail="trainingPrompts must be a list of prompt/response pairs")
+
+            trainer_prompts = []
+            for item in training_data:
+                if not all(k in item for k in ["userPrompt", "expectedResponse"]):
+                    raise HTTPException(status_code=500, detail="Invalid training prompt format")
+                trainer_prompts.extend([
+                    {"role": "user", "content": item["userPrompt"]},
+                    {"role": "assistant", "content": item["expectedResponse"]}
+                ])
+
+            # Build context with agent info and training prompts
+            context = [
+                {"role": "assistant", "content": f"Your name is {chat_context['agentName']}"},
+                {"role": "assistant", "content": f"Description: {chat_context['description']}"},
+                {"role": "assistant", "content": chat_context["system"]},
+                {"role": "assistant", "content": f"You should only respond using the following template:\n\n{chat_context['responseTemplate']}"},
+                {"role": "assistant", "content": "Here are some prompt-response examples:"},
+                *trainer_prompts
+            ]
+            # Add user messages to context
+            
+            try:
+                context.extend([m.to_dict() for m in chatrequest.messages])
+            except Exception as e:
+                raise HTTPException(status_code=422, detail=f"Invalid request messages format: {str(e)}")
+            print(context)
+            # Call OpenAI's chat completion API
+            response = openai_client.chat_completion(context)
+            print("response", response)
+            if not response or not isinstance(response, str):
+                raise HTTPException(status_code=500, detail="Invalid OpenAI response")
+
+            # Return the completion response as a ChatResponse
+            return ChatResponse(response=response)
+
+        except HTTPException as he:
+            raise he  # Let FastAPI handle it
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Internal Server Error")
 # --- Queries ---
+
+
 @strawberry.type
 class AgentQuery:
     @strawberry.field
@@ -102,16 +291,76 @@ class AgentQuery:
     def agent(self, id: int) -> Optional[ResponseCreatePromptEngineeredAgent]:
         db = next(get_db())
         agent = db.query(PromptEngineeredAgent).filter(PromptEngineeredAgent.id == id).first()
-
         return map_model(agent,ResponseCreatePromptEngineeredAgent) if agent else None
 
     @strawberry.field
     @requires_auth
-    def list_agents(self, info:Info) -> List[ResponseCreatePromptEngineeredAgent]:
-        user = info.context.get("user")
-        db = next(get_db())
-        agents = db.query(PromptEngineeredAgent).all()
-        # agents = db.query(PromptEngineeredAgent).filter(PromptEngineeredAgent.email == user.email)
-        return [map_model(a,ResponseCreatePromptEngineeredAgent) for a in agents] if len(agents) else None
+    def list_agents(self, info: Info, page: int = 0, filters: Optional[ListAgentFilters] = None) -> ListAgentResponse:
+        if page < 0:
+            raise HTTPException(status_code=400, detail="Page number must be >= 0")
 
+        db = next(get_db())
+        base_query = db.query(PromptEngineeredAgent)
+
+        # Apply search filter
+        if filters and filters.search:
+            term = f"%{filters.search.lower()}%"
+            base_query = base_query.filter(
+                or_(
+                    PromptEngineeredAgent.agentName.ilike(term),
+                    PromptEngineeredAgent.description.ilike(term),
+                    PromptEngineeredAgent.system.ilike(term)
+                )
+            )
+
+        # Apply ordering
+        order_by_field = filters.order_by if filters and filters.order_by else "createdDate"
+        order_column = getattr(PromptEngineeredAgent, order_by_field, None)
+        if not order_column:
+            raise HTTPException(status_code=400, detail=f"Invalid order_by field: {order_by_field}")
+        if filters and filters.descending is False:
+            order_column = order_column.asc()
+        else:
+            order_column = order_column.desc()
+        base_query = base_query.order_by(order_column)
+
+        # Pagination
+        total = base_query.count()
+        limit = SQL_RECORDS_LIMIT
+        offset = page * limit
+        has_more = (offset + limit) < total
+
+        agents = base_query.offset(offset).limit(limit).all()
+        agents_out = [map_model(a, ResponseCreatePromptEngineeredAgent) for a in agents]
+
+        return ListAgentResponse(
+            agents=agents_out,
+            has_more=has_more,
+            page=page
+        )
+
+
+    # @strawberry.field
+    # @requires_auth
+    # @list_items(
+    #     model=PromptEngineeredAgent,
+    #     map_to=lambda r: map_model(r, ResponseCreatePromptEngineeredAgent),
+    #     search_fields=["agentName", "description", "system"],
+    #     default_order_by="createdDate"
+    # )
+    # def list_agents(self, info:Info, data:List[ResponseCreatePromptEngineeredAgent], page:int, has_more:bool) -> ListAgentResponse:
+    #     return ListAgentResponse(agents=data, has_more=has_more, page=page)
+
+    @strawberry.field
+    @requires_auth
+    @list_items(
+        model=PromptEngineeredAgent,
+        map_to=lambda r: map_model(r, ResponseCreatePromptEngineeredAgent),
+        search_fields=["agentName", "description", "system"],
+        default_order_by="createdDate",
+        responseModel=ListAgentResponse
+    )
+    def list_agents_beta(self, info: Info, request:ListAgentsRequest, data:Optional[ListAgentres]) -> ListAgentResponse:
+
+        return data
 

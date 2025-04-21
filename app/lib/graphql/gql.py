@@ -54,5 +54,3 @@ def map_model(source: S, target_class: Type[T]) -> T:
     filtered_data = {field: source_dict[field] for field in target_fields if field in source_dict}
     return target_class(**filtered_data)
 
-
-

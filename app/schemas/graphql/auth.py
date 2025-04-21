@@ -5,7 +5,7 @@ from app.db.session import get_db
 from app.core import security
 from app.crud.auth import create_user, authenticate_user
 from app.core.dependencies import get_current_user
-from app.lib.gql import requires_auth
+from app.lib.graphql.gql import requires_auth
 
 @strawberry.type
 class UserOut:

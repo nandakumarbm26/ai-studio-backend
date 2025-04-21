@@ -59,7 +59,7 @@ def chat_with_openai(request: ChatRequest, db: Session = Depends(get_db)):
 
         # Add user messages
         try:
-            context.extend([m.dict() for m in request.messages])
+            context.extend([m.model_dump() for m in request.messages])
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Invalid request messages format: {str(e)}")
 
