@@ -64,7 +64,7 @@ from sqlalchemy.orm import Query
 from app.models.agent import PromptEngineeredAgent
 import strawberry
 from datetime import datetime
-
+from app.db.session import get_db
 T = TypeVar("T")
 
 # Define GraphQL Input Type for Query Arguments
@@ -82,19 +82,21 @@ def list_items(
     search_fields: Optional[List[str]] = None,
     default_order_by: Optional[str] = None,
     default_limit: int = 20,
-    responseModel = None
+    responseModel = None,
+    requestModel = None
 ):
     def decorator(resolver: Callable[..., T]) -> Callable[..., T]:
         @wraps(resolver)
-        def wrapper(self, info: Info, request: ListAgentsRequest, **kwargs) -> T:
+        def wrapper(self, info: Info, request: requestModel, **kwargs) -> responseModel:
             # Page validation
             if request.page < 0:
                 raise HTTPException(status_code=400, detail="Page number must be >= 0")
 
-            db = next(info.context["get_db"]())
+            db = next(get_db())
             query: Query = db.query(model)
 
             # Search logic
+            print(request.s)
             if request.s and search_fields:
                 from sqlalchemy import or_
                 conditions = [getattr(model, field).ilike(f"%{request.s}%") for field in search_fields]
@@ -109,12 +111,13 @@ def list_items(
             # Pagination logic
             offset = request.page * default_limit
             items = query.offset(offset).limit(default_limit + 1).all()
+            print(offset,default_limit)
             has_more = len(items) > default_limit
             items = items[:default_limit]
 
             # Mapping items
             mapped_items = [map_to(item) for item in items]
-            data = responseModel(data=mapped_items, page=request.page, has_more=has_more)
-            return resolver(self, info, request, data, **kwargs)
+            data = responseModel(items=mapped_items, page=request.page, has_more=has_more)
+            return resolver(self, info=info, request=request, data=data, **kwargs)
         return wrapper
     return decorator

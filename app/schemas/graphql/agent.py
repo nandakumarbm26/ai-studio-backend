@@ -136,7 +136,7 @@ class ResponseCreatePromptEngineeredAgentRes:
 
 @strawberry.type
 class ListAgentResponse:
-    agents : List[ResponseCreatePromptEngineeredAgent]
+    items : List[ResponseCreatePromptEngineeredAgent]
     has_more : bool
     page : int
 
@@ -281,9 +281,8 @@ class AgentMutation:
             raise he  # Let FastAPI handle it
         except Exception as e:
             raise HTTPException(status_code=500, detail="Internal Server Error")
+        
 # --- Queries ---
-
-
 @strawberry.type
 class AgentQuery:
     @strawberry.field
@@ -293,74 +292,18 @@ class AgentQuery:
         agent = db.query(PromptEngineeredAgent).filter(PromptEngineeredAgent.id == id).first()
         return map_model(agent,ResponseCreatePromptEngineeredAgent) if agent else None
 
+
     @strawberry.field
-    @requires_auth
-    def list_agents(self, info: Info, page: int = 0, filters: Optional[ListAgentFilters] = None) -> ListAgentResponse:
-        if page < 0:
-            raise HTTPException(status_code=400, detail="Page number must be >= 0")
-
-        db = next(get_db())
-        base_query = db.query(PromptEngineeredAgent)
-
-        # Apply search filter
-        if filters and filters.search:
-            term = f"%{filters.search.lower()}%"
-            base_query = base_query.filter(
-                or_(
-                    PromptEngineeredAgent.agentName.ilike(term),
-                    PromptEngineeredAgent.description.ilike(term),
-                    PromptEngineeredAgent.system.ilike(term)
-                )
-            )
-
-        # Apply ordering
-        order_by_field = filters.order_by if filters and filters.order_by else "createdDate"
-        order_column = getattr(PromptEngineeredAgent, order_by_field, None)
-        if not order_column:
-            raise HTTPException(status_code=400, detail=f"Invalid order_by field: {order_by_field}")
-        if filters and filters.descending is False:
-            order_column = order_column.asc()
-        else:
-            order_column = order_column.desc()
-        base_query = base_query.order_by(order_column)
-
-        # Pagination
-        total = base_query.count()
-        limit = SQL_RECORDS_LIMIT
-        offset = page * limit
-        has_more = (offset + limit) < total
-
-        agents = base_query.offset(offset).limit(limit).all()
-        agents_out = [map_model(a, ResponseCreatePromptEngineeredAgent) for a in agents]
-
-        return ListAgentResponse(
-            agents=agents_out,
-            has_more=has_more,
-            page=page
-        )
-
-
-    # @strawberry.field
     # @requires_auth
-    # @list_items(
-    #     model=PromptEngineeredAgent,
-    #     map_to=lambda r: map_model(r, ResponseCreatePromptEngineeredAgent),
-    #     search_fields=["agentName", "description", "system"],
-    #     default_order_by="createdDate"
-    # )
-    # def list_agents(self, info:Info, data:List[ResponseCreatePromptEngineeredAgent], page:int, has_more:bool) -> ListAgentResponse:
-    #     return ListAgentResponse(agents=data, has_more=has_more, page=page)
-
-    @strawberry.field
-    @requires_auth
     @list_items(
         model=PromptEngineeredAgent,
         map_to=lambda r: map_model(r, ResponseCreatePromptEngineeredAgent),
         search_fields=["agentName", "description", "system"],
         default_order_by="createdDate",
-        responseModel=ListAgentResponse
+        responseModel=ListAgentResponse,
+        requestModel = ListAgentsRequest
     )
     def list_agents_beta(self, info: Info, request:ListAgentsRequest, data:Optional[ListAgentres]) -> ListAgentResponse:
-
+        print(data)
         return data
 
