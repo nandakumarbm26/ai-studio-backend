@@ -23,7 +23,11 @@ class UserOut(BaseModel):
 
 class Error(BaseModel):
     error: str
-    
+
+
+class Success(BaseModel):
+    message: str
+
 class Token(BaseModel):
     access_token: str
     token_type: str

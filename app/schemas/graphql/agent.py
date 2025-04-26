@@ -220,7 +220,6 @@ class AgentMutation:
             openai_client = OpenAI()  # Assuming OpenAI is your custom class for API interaction
             db = next(get_db())  # Get the database session
             agents = get_prompt_agent(db, chatrequest.filters)  # Retrieve agents based on the provided filters
-            print(agents)
             if not agents:
                 raise HTTPException(status_code=404, detail="No agent found for given filters")
 
@@ -267,10 +266,8 @@ class AgentMutation:
                 context.extend([m.to_dict() for m in chatrequest.messages])
             except Exception as e:
                 raise HTTPException(status_code=422, detail=f"Invalid request messages format: {str(e)}")
-            print(context)
             # Call OpenAI's chat completion API
             response = openai_client.chat_completion(context)
-            print("response", response)
             if not response or not isinstance(response, str):
                 raise HTTPException(status_code=500, detail="Invalid OpenAI response")
 
@@ -304,6 +301,5 @@ class AgentQuery:
         requestModel = ListAgentsRequest
     )
     def list_agents_beta(self, info: Info, request:ListAgentsRequest, data:Optional[ListAgentres]) -> ListAgentResponse:
-        print(data)
         return data
 

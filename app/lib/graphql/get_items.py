@@ -96,7 +96,6 @@ def list_items(
             query: Query = db.query(model)
 
             # Search logic
-            print(request.s)
             if request.s and search_fields:
                 from sqlalchemy import or_
                 conditions = [getattr(model, field).ilike(f"%{request.s}%") for field in search_fields]
@@ -111,7 +110,6 @@ def list_items(
             # Pagination logic
             offset = request.page * default_limit
             items = query.offset(offset).limit(default_limit + 1).all()
-            print(offset,default_limit)
             has_more = len(items) > default_limit
             items = items[:default_limit]
 

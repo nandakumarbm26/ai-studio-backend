@@ -12,7 +12,6 @@ def get_current_user(info, db: Session = Depends(get_db)):
     request = info.context["request"]
 
     # Extract Authorization header
-    print(dict(request.headers))
     auth_header = dict(request.headers).get("authorization")
     if not auth_header:
         raise HTTPException(status_code=401, detail="Missing Authorization header")

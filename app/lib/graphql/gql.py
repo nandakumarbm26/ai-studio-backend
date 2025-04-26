@@ -13,6 +13,10 @@ def requires_auth(resolver: Callable[..., T]) -> Callable[..., T]:
     @wraps(resolver)
     def wrapper(self, info: Info, **kwargs) -> T:
         request = info.context["request"]
+        token = request.cookies.get("access_token")
+        if not token:
+            raise Exception("Not authenticated")
+        
         auth_header = dict(request.headers).get("authorization")
 
         if not auth_header:
