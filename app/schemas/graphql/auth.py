@@ -205,6 +205,7 @@ class AuthMutation:
         refresh_token = security.create_refresh_token(data={"sub": email})
 
         response: Response = info.context["response"]
+  
         response.set_cookie(
             key="access_token",
             value=access_token,
@@ -225,7 +226,25 @@ class AuthMutation:
         )
 
         return GQLResponse(message="token refresh successfull")
-
+    
+    @strawberry.mutation
+    def logout(self, info: Info) -> GQLResponse:
+        response: Response = info.context["response"]
+        try:
+            response.delete_cookie(key="access_token",
+                httponly=False,
+                secure=False,         
+                samesite="Lax",      
+                path="/")
+            response.delete_cookie( key="refresh_token",
+                httponly=True,
+                secure=False,         
+                samesite="Lax",      
+                path="/")
+        except Exception as e:
+            raise HTTPException(400, detail=f"something went wrong : {e}")
+        return GQLResponse(message="logout successful")
+    
 @strawberry.type
 class AuthQuery:
     @strawberry.field
