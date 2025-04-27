@@ -40,7 +40,7 @@ def requires_auth(resolver: Callable[..., T]) -> Callable[..., T]:
             raise HTTPException(status_code=404, detail="User not found")
         
         info.context["user"] = UserOut(**user.__dict__)
-        return resolver(self, info)
+        return resolver(self, info, **kwargs)
 
     return cast(Callable[..., T], wrapper)
 

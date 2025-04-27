@@ -12,23 +12,23 @@ from app.crud.agent import get_prompt_agent
 from app.lib.openai_wrapper import OpenAI
 import json
 from json.decoder import JSONDecodeError
-from typing import List, Optional
+from typing import List, Optional,Type
 from enum import Enum
 from sqlalchemy import or_
-from app.lib.graphql.get_items import list_items
+from app.lib.graphql.get_items import list_items, get_item_by_id
 SQL_RECORDS_LIMIT =  10
 
 
 @strawberry.enum
 class Role(Enum):
-    system = "system"
-    user = "user"
-    assistant = "assistant"
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
 
 @strawberry.enum
 class InputEnum(Enum):
-    text = "text"
-    image_url = "image_url"
+    TEXT = "text"
+    IMAGE_URL = "image_url"
 
 # Define message types for content (Text and Image)
 @strawberry.input
@@ -46,7 +46,7 @@ class Content:
 @strawberry.input
 class Message:
     role: Role  # Role of the sender: system, user, or assistant
-    content: Content  # Content of the message (Text or Image)
+    content: Content # Content of the message (Text or Image)
 
     def to_dict(self):
         parts = []
@@ -87,9 +87,15 @@ class ChatRequest:
 # Define the response type for the chat completion (output type)
 @strawberry.type
 class ChatResponse:
-    response: str  # The chat completion response
+    content: str
+    refusal: Optional[str]
+    role: str
+    annotations: Optional[str]
+    audio: Optional[str]
+    function_call: Optional[str]
+    tool_calls: Optional[str]
 
-
+    
 # --- GraphQL Types --- 
 @strawberry.input
 class TrainingPrompt:
@@ -151,6 +157,10 @@ class ListAgentsRequest:
     page: int
     s: Optional[str] = None
     order_by: Optional[str] = None
+
+@strawberry.input
+class AgentRequest:
+    id:int
 
 @strawberry.input
 class ListAgentFilters:
@@ -267,12 +277,13 @@ class AgentMutation:
             except Exception as e:
                 raise HTTPException(status_code=422, detail=f"Invalid request messages format: {str(e)}")
             # Call OpenAI's chat completion API
-            response = openai_client.chat_completion(context)
-            if not response or not isinstance(response, str):
-                raise HTTPException(status_code=500, detail="Invalid OpenAI response")
+            try:
+                response = openai_client.chat_completion(context)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Invalid OpenAI response :{e}")
 
             # Return the completion response as a ChatResponse
-            return ChatResponse(response=response)
+            return ChatResponse(**response)
 
         except HTTPException as he:
             raise he  # Let FastAPI handle it
@@ -291,7 +302,7 @@ class AgentQuery:
 
 
     @strawberry.field
-    # @requires_auth
+    @requires_auth
     @list_items(
         model=PromptEngineeredAgent,
         map_to=lambda r: map_model(r, ResponseCreatePromptEngineeredAgent),
@@ -301,5 +312,16 @@ class AgentQuery:
         requestModel = ListAgentsRequest
     )
     def list_agents_beta(self, info: Info, request:ListAgentsRequest, data:Optional[ListAgentres]) -> ListAgentResponse:
+        return data
+    
+    @strawberry.field
+    @requires_auth
+    @get_item_by_id(
+        model=PromptEngineeredAgent,
+        map_to=lambda r: map_model(r, ResponseCreatePromptEngineeredAgent),
+        responseModel=ResponseCreatePromptEngineeredAgent,
+        requestModel = AgentRequest
+    )
+    def agent_by_id(self, info: Info, request:AgentRequest, data:Optional[ListAgentres]) -> ResponseCreatePromptEngineeredAgent:
         return data
 

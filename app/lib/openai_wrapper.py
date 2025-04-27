@@ -47,8 +47,8 @@ class OpenAI:
                 max_tokens=self.max_tokens,
                 temperature=self.temperature
             )
-            # return response.model_dump()
-            return response.choices[0].message.content
+            
+            return response.choices[0].message.model_dump()
         except Exception as e:
             return {"error": str(e)}
     

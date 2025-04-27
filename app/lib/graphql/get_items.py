@@ -119,3 +119,41 @@ def list_items(
             return resolver(self, info=info, request=request, data=data, **kwargs)
         return wrapper
     return decorator
+
+
+
+def get_item_by_id(
+    model,
+    map_to: Callable[[Any], Any],
+    default_limit: int = 20,
+    responseModel = None,
+    requestModel = None
+):
+    def decorator(resolver: Callable[..., T]) -> Callable[..., T]:
+        @wraps(resolver)
+        def wrapper(*args, **kwargs):
+            self = args[0]
+            info: Info = kwargs.get("info")
+            request: requestModel = kwargs.get("request")
+
+            if request is None:
+                raise HTTPException(status_code=400, detail="Request is missing")
+
+            if not request.id:
+                raise HTTPException(status_code=400, detail="Please provide ID")
+            
+            db = next(get_db())
+            query: Query = db.query(model)
+
+            query = query.filter(model.id == request.id)
+
+            item = query.first()
+           
+            if not item:
+                raise HTTPException(400, "Agent now found")
+            # Mapping items
+            mapped_item = map_to(item)
+            data = mapped_item
+            return resolver(self, info=info, data=data, **kwargs)
+        return wrapper
+    return decorator
