@@ -19,11 +19,15 @@ class UserOut(BaseModel):
     role: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class Error(BaseModel):
     error: str
-    
+
+
+class Success(BaseModel):
+    message: str
+
 class Token(BaseModel):
     access_token: str
     token_type: str

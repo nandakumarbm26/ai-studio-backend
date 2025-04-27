@@ -73,4 +73,4 @@ class ResponseCreatePromptEngineeredAgent(UpdatePromptEngineeredAgent):
     createdDate: Optional[datetime] = None
     updatedDate: Optional[datetime] = None
     class Config:
-        orm_mode = True
+        from_attributes = True
